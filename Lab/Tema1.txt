@@ -1,0 +1,490 @@
+
+select *
+from title;
+select *
+from member;
+select *
+from title_copy;
+select * 
+from rental;
+select * 
+from reservation;
+
+select  t.title as Titlu,tc.copy_id as "Numar Exemplar", tc.status as Status, nvl2(r.act_ret_date,'Available', 'Rented') as "Status Curent" 
+from title t
+join title_copy tc on (t.title_id = tc.title_id) join rental r on (r.copy_id = tc.copy_id and r.title_id = tc.title_id)
+order by 1,2;
+
+select t.title as Titlu, tc.copy_id as "Numar Exemplar", tc.status as Status, nvl2(r.act_ret_date,'Available', 'Rented') as "Status Curent" 
+from title t
+join title_copy tc on (t.title_id = tc.title_id) join rental r on (r.copy_id = tc.copy_id and r.title_id = tc.title_id);
+
+
+	select title_id, copy_id, status, (
+		select
+    			CASE WHEN count(*) > 0
+        				THEN 'RENTED'
+    			ELSE
+        				'AVAILABLE'
+    			END    
+		from rental where title_id = t.title_id and exp_ret_date > sysdate
+) from title_copy t;
+
+with tb1 as (
+	select title_id, copy_id, status, (
+    	select
+        	CASE WHEN count(*) > 0
+            	THEN 'RENTED'
+        	ELSE
+            	'AVAILABLE'
+        	END
+    	from rental where title_id = t.title_id and exp_ret_date > sysdate
+	) as statuscorect from title_copy t
+) select count(*) as "Nr status gresit" from tb1 where status != statuscorect ;
+
+select title_id, copy_id, status, (
+		select
+    			CASE WHEN count(*) > 0
+        				THEN 'RENTED'
+    			ELSE
+        				'AVAILABLE'
+    			END    
+		from rental where title_id = t.title_id and exp_ret_date > sysdate
+) from title_copy t;
+
+
+select count(*)
+from rental r, title t, title_copy tc 
+where nvl2(r.act_ret_date,'AVAILABLE', 'RENTED') != tc.status and r.copy_id = tc.copy_id and (t.title_id = tc.title_id);
+
+create table TITLE_COPY_DMB as SELECT * FROM title_copy;
+select * from user_constraints where table_name = 'TITLE_COPY_DMB';
+select * from title_copy_dmb;
+with tabela as(select distinct res.title_id, res.res_date, r.book_date
+from reservation res
+join rental r on (r.title_id = res.title_id and r.member_id = res.member_id)
+where res.res_date = r.book_date)
+select count(*)
+from tabela;
+
+
+
+
+select *
+from member;
+
+select * from rental
+order by title_id,member_id;
+
+SELECT CONCAT(CONCAT(mem.last_name," "), mem.first_name) as Nume, tit.title as Titlu
+FROM member mem, title tit
+JOIN rental ren ON tit.title_id = ren.title_id;
+
+SELECT mem.last_name, mem.first_name, tit.title as Titlu
+FROM member mem, title tit
+JOIN rental ren ON (tit.title_id = ren.title_id)
+WHERE  mem.member_id = ren.member_id;
+-- ce titluri a inchiriat fiecare membru
+
+-----------------------------------------------------------------------------------------------------------------------
+--9.De câte ori a împrumutat unmembru(nume ?i prenume)fiecare film(titlu)?
+WITH tabela as (SELECT mem.last_name, mem.first_name, tit.title, mem.member_id, tit.title_id
+                FROM member mem, title tit
+                JOIN rental ren ON (tit.title_id = ren.title_id)
+                WHERE  mem.member_id = ren.member_id)
+SELECT DISTINCT CONCAT(CONCAT(tabl.last_name,' '), tabl.first_name) as Membru, tabl.title as Titlu,  (select count(*)
+                                                                                            from rental
+                                                                                            where tabl.member_id = member_id and tabl.title_id = title_id) as Nr
+FROM tabela tabl
+ORDER BY 3 DESC;
+
+
+
+
+--10.De câte ori a împrumutat un membru(nume ?i prenume)fiecareexemplar(cod)alunui film(titlu)? 
+
+WITH tabela as (SELECT mem.last_name, mem.first_name, tit.title, mem.member_id, tit.title_id, tc.copy_id
+                FROM member mem, title tit
+                JOIN rental ren ON (tit.title_id = ren.title_id)
+                JOIN title_copy tc ON (tc.title_id = tit.title_id )
+                WHERE  mem.member_id = ren.member_id and ren.copy_id = tc.copy_id)
+SELECT DISTINCT CONCAT(CONCAT(tabl.last_name,' '), tabl.first_name) as Membru, tabl.title as Titlu, tabl.copy_id as IdCopie,  (SELECT COUNT(*)
+                                                                                                                                FROM rental
+                                                                                                                                WHERE tabl.member_id = member_id and tabl.title_id = title_id and tabl.copy_id = copy_id) as Nr
+FROM tabela tabl
+ORDER BY 1,3 DESC;
+
+
+--11.Ob?ine?i statusul celuimai des împrumutatexemplaralfiec?rui film(titlu).
+
+SELECT *FROM title_copy_dmb; -- tabela creata si updatata la 8
+SELECT * FROM rental;
+WITH numar_exemplare as (SELECT title_id, copy_id, COUNT(*) as numar_per_titlu
+                        FROM rental ex
+                        GROUP BY title_id, copy_id
+                        HAVING COUNT(*) = (SELECT MAX(numar_per_titlu)
+                                            FROM (SELECT title_id, copy_id, COUNT(*) as numar_per_titlu
+                                                    FROM rental
+                                                    GROUP BY title_id, copy_id) maxim
+                                            WHERE ex.title_id = maxim.title_id
+                                            GROUP BY ex.title_id
+                                            )
+                        )
+SELECT UNIQUE tc.title_id as ID,tc.copy_id, nr.numar_per_titlu as Numar, tc.status as Status
+FROM title_copy_dmb tc, numar_exemplare nr
+WHERE tc.title_id = nr.title_id and nr.copy_id = tc.copy_id
+ORDER BY 1;                        
+
+                
+--12.Pentru anumite zile specificate dinlunacurent?,ob?ine?i num?rul de împrumuturi efectuate
+
+--a.Se iau în considerare doar primele 2 zile din lun?
+-- a --
+SELECT to_char(act_ret_date, 'dd') ziua, COUNT(act_ret_date) imprumuturi
+FROM rental
+WHERE to_char(act_ret_date, 'dd-mm-yyyy') = '01-' || to_char(sysdate, 'mm-yyyy') 
+     OR to_char(act_ret_date, 'dd-mm-yyyy') = '02-' || to_char(sysdate, 'mm-yyyy')
+GROUP BY act_ret_date;
+
+-- b --
+SELECT to_char(act_ret_date, 'dd') ziua, count(act_ret_date) imprumuturi
+FROM rental
+WHERE to_char(act_ret_date, 'mm-yyyy') = to_char(sysdate, 'mm-yyyy') 
+GROUP BY act_ret_date;
+
+
+-- c --
+SELECT to_char(zi_luna, 'dd') ziua,(SELECT COUNT(act_ret_date)
+                                    FROM rental
+                                    WHERE act_ret_date = zi_luna) imprumuturi
+FROM (SELECT to_date('01-' || to_char(sysdate, 'mon-yyyy')) + level - 1 zi_luna
+      FROM dual
+      CONNECT BY LEVEL <= TO_DATE('01-' || TO_CHAR(sysdate + 31, 'mon-yyyy')) - TO_DATE('01-' || to_char(sysdate, 'mon-yyyy'))
+     )
+group by zi_luna
+order by ziua;
+
+--SQL INDEX
+--1. Se folosesc pentru a accelera performanta interogarilor prin reducerea numarului de pagini ale bazei de date vizitate
+--2. Exista doua tipuri de index: grupat si nongrupat
+--3. Cum se creaza
+--CREATE Tabela  
+--ON  Element(PostalCode); 
+--4. Un index contine chei construite pentru una sau mai multe coloane. Aceste chei sunt stocate intr-un arbore binar care permite gasirea de linii asociate cu cheile intr-un mod eficient si rapid.
+ 
+--------------------------------------------------------------------------------------------------------------------------------
+
+--tema curs
+
+DECLARE
+ananas1 VARCHAR2(100);
+BEGIN
+    ananas1 := 'Acesta este primul ananas';
+DECLARE
+    ananas2 VARCHAR2(100) := 'Acesta este al doilea ananas';
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('<<Bloc 2>>');
+        DBMS_OUTPUT.PUT_LINE('Folosesc aceasta fraza '||ananas1);
+        DBMS_OUTPUT.PUT_LINE('Folosesc aceasta fraza '||ananas2);
+        --DBMS_OUTPUT.PUT_LINE('Folosesc aceasta fraza '||ananas3); -----------eroare
+        
+        ananas2 := 'Modific aceasta fraza '||ananas2;
+        ananas1 := 'Modific aceasta fraza '||ananas1;
+        --ananas3 := 'Modific aceasta fraza '||ananas3; ------ eroare
+        
+        DBMS_OUTPUT.PUT_LINE(ananas1);
+        DBMS_OUTPUT.PUT_LINE(ananas2);
+         --DBMS_OUTPUT.PUT_LINE(ananas3); ---------eroare
+    END;
+    
+    DBMS_OUTPUT.PUT_LINE('<<Bloc 1>>');
+    DBMS_OUTPUT.PUT_LINE(ananas1);
+    --DBMS_OUTPUT.PUT_LINE(ananas2); ---------eroare
+    --DBMS_OUTPUT.PUT_LINE(ananas3); ---------eroare
+DECLARE   
+    ananas3 VARCHAR2(100) := 'Acesta este al treilea ananas';
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('<<Bloc 3>>');
+        DBMS_OUTPUT.PUT_LINE('Folosesc aceasta fraza '||ananas1);
+        --DBMS_OUTPUT.PUT_LINE('Folosesc aceasta fraza '||ananas2);
+        DBMS_OUTPUT.PUT_LINE('Folosesc aceasta fraza '||ananas3);
+        
+        ananas3 := 'Modific aceasta fraza '||ananas3;
+        ananas1 := 'Modific aceasta fraza '||ananas1;
+        --ananas2 := 'Modific aceasta fraza '||ananas2; ------eroare
+        
+        DBMS_OUTPUT.PUT_LINE(ananas1);
+        DBMS_OUTPUT.PUT_LINE(ananas3);
+        --DBMS_OUTPUT.PUT_LINE(ananas2); ---------eroare
+    END;
+END;
+/
+
+----------------------
+
+DECLARE
+bloc1 VARCHAR2(100);
+BEGIN
+    bloc1 := 'Bloc1';
+DECLARE
+    bloc2 VARCHAR2(100) := 'Bloc2';
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('<<Bloc 2>>');
+        DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc1);
+        DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc2);
+        --DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc3);
+        --DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc4);
+        
+        bloc2 := 'Modific '||bloc2;
+        bloc1 := 'Modific '||bloc1;
+        --bloc3 := 'Modific '||bloc3;
+        --bloc4 := 'Modific '||bloc4;
+        
+        DBMS_OUTPUT.PUT_LINE(bloc1);
+        DBMS_OUTPUT.PUT_LINE(bloc2);
+        --DBMS_OUTPUT.PUT_LINE(bloc3);
+        --DBMS_OUTPUT.PUT_LINE(bloc4);
+    END;
+    DBMS_OUTPUT.PUT_LINE('<<Bloc 1>>');
+    --DBMS_OUTPUT.PUT_LINE(bloc2); ---------eroare
+    DBMS_OUTPUT.PUT_LINE(bloc1);
+    --DBMS_OUTPUT.PUT_LINE(bloc3); ---------eroare
+    --DBMS_OUTPUT.PUT_LINE(bloc4); ---------eroare
+DECLARE   
+    bloc3 VARCHAR2(100) := 'Bloc3';
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('<<Bloc 3>>');
+        DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc1);
+        DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc3);
+        --DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc2);
+        --DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc4);
+        
+        bloc3 := 'Modific '||bloc3;
+        bloc1 := 'Modific '||bloc1;
+        --bloc2 := 'Modific '||bloc2;
+        --bloc4 := 'Modific '||bloc4;
+        
+        DBMS_OUTPUT.PUT_LINE(bloc1);
+        --DBMS_OUTPUT.PUT_LINE(bloc2);
+        DBMS_OUTPUT.PUT_LINE(bloc3);
+        --DBMS_OUTPUT.PUT_LINE(bloc4);
+        
+        DECLARE
+        bloc4 VARCHAR2(100) := 'Bloc4';
+        BEGIN
+        
+        DBMS_OUTPUT.PUT_LINE('<<Bloc 4>>');
+        DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc1);
+        --DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc2);
+        DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc3);
+        DBMS_OUTPUT.PUT_LINE('Folosesc '||bloc4);
+        
+        bloc4 := 'Modific '||bloc4;
+        bloc3 := 'Modific '||bloc3;
+        --bloc2 := 'Modific '||bloc2;
+        bloc1 := 'Modific '||bloc1;
+        
+        DBMS_OUTPUT.PUT_LINE(bloc4);
+        DBMS_OUTPUT.PUT_LINE(bloc3);
+        --DBMS_OUTPUT.PUT_LINE(bloc2);
+        DBMS_OUTPUT.PUT_LINE(bloc1);
+        END;
+        
+        DBMS_OUTPUT.PUT_LINE(bloc1); 
+        --DBMS_OUTPUT.PUT_LINE(bloc2); ---------eroare
+        DBMS_OUTPUT.PUT_LINE(bloc3);
+        --DBMS_OUTPUT.PUT_LINE(bloc4); ---------eroare
+    END;
+END;
+/
+
+
+-------------------------------------------------------------------------------------------------------------------------------
+--tema 2 curs
+
+-- ex1
+--Ex1: Sa se testeze ce exceptii apar pe comenzile UPDATE si DELETE cu clauza returning (NO_DATA_FOUND/TOO_MANY_ROWS)
+-- Exemplu 3.8
+-- (un exercitiu cu DELETE...RETURNING..., alt exercitiu cu UPDATE...RETURNING... 
+-- si apelati pentru valori care sa complileze fara eroare si alte 2 valori prin 
+--care sa incercati sa intrati pe cele  2 exceptii de mai sus). 
+--Ce observati? Incercati sa initializati la declarare variabilele folosite in clauza RETURNING.
+select *
+from employees;
+--managerul 205, 201, 102 au cate un singur angajat
+SET serveroutput ON;
+DECLARE
+    cod_angajat_bdm NUMBER(6);
+    prenume_anagajat_bdm VARCHAR(20);
+    nume_angajat_bdm  VARCHAR2(25);
+    email_bdm VARCHAR2(25);
+    telefon_bdm VARCHAR2(20);
+    data_angajarii_bdm    DATE;
+    cod_job_bdm VARCHAR(10);
+    salariu_bdm NUMBER(8,2);
+    pct_comision_bdm NUMBER(2,2);
+    cod_manager_bdm NUMBER(6);
+    cod_departament_bdm NUMBER(4);
+
+    id_cautat employees.manager_id%TYPE:= &idManager; -- preiau id ul de la tastatura
+    
+    
+BEGIN
+    DELETE FROM employees_copy_bdm
+    WHERE manager_id = id_cautat
+    RETURNING employee_id, first_name, last_name, email, phone_number, hire_date, job_id, salary, commission_pct, manager_id, department_id
+    INTO cod_angajat_bdm, prenume_anagajat_bdm, nume_angajat_bdm, email_bdm, telefon_bdm, data_angajarii_bdm, cod_job_bdm, salariu_bdm, pct_comision_bdm, cod_manager_bdm, cod_departament_bdm;
+    EXCEPTION
+    WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('Nu am gasit niciun anagajat al carui manager are id-ul cautat!'); -- nu o sa intre pe eroarea aceasta deoarece lasa campurile de completat nule
+    WHEN TOO_MANY_ROWS THEN DBMS_OUTPUT.PUT_LINE('Prea multi angajati gasiti!');
+END;
+/
+
+
+--b
+
+DECLARE
+    cod_angajat_bdm NUMBER(6);
+    prenume_anagajat_bdm VARCHAR(20);
+    nume_angajat_bdm  VARCHAR2(25);
+    email_bdm VARCHAR2(25);
+    telefon_bdm VARCHAR2(20);
+    data_angajarii_bdm    DATE;
+    cod_job_bdm VARCHAR(10);
+    salariu_bdm NUMBER(8,2);
+    pct_comision_bdm NUMBER(2,2);
+    cod_manager_bdm NUMBER(6);
+    cod_departament_bdm NUMBER(4);
+
+    id_cautat employees.manager_id%TYPE:= &idManager; -- preiau id ul de la tastatura
+    
+    
+BEGIN
+    UPDATE employees_copy_bdm
+    SET last_name = 'ananas'
+    WHERE manager_id = id_cautat
+    RETURNING employee_id, first_name, last_name, email, phone_number, hire_date, job_id, salary, commission_pct, manager_id, department_id
+    INTO cod_angajat_bdm, prenume_anagajat_bdm, nume_angajat_bdm, email_bdm, telefon_bdm, data_angajarii_bdm, cod_job_bdm, salariu_bdm, pct_comision_bdm, cod_manager_bdm, cod_departament_bdm;
+    EXCEPTION
+    WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('Nu am gasit niciun anagajat al carui manager are id-ul cautat!'); -- nu o sa intre pe eroarea aceasta deoarece lasa campurile de completat nule
+    WHEN TOO_MANY_ROWS THEN DBMS_OUTPUT.PUT_LINE('Prea multi angajati gasiti!');
+END;
+/
+
+select *
+from employees_copy_bdm
+where manager_id = 201;
+
+
+rollback;
+
+--Ex2:  Dati 3 exemple asemanatoare cu  exemplele 3.13, 3.14, 3.15, 3.16) in care sa folositi CASE din SQL,
+--respectiv din PL/SQL astfel incat sa afisati pentru un departament dat de la tastatura cati angajati lucreaza in acel departament.
+--Se vor afisa mesaje corespunzatoare folosind comanda CASE din PL/SQL, dar si expresia CASE din SQL. 
+--Departamentele vor fi alese astfel incat sa lucreze in ele 1 singur angajat, mai multi angajati sau niciun angajat.
+
+DECLARE
+numar Number(6);
+id_cautat employees.department_id%TYPE:= &idDepartment; -- preiau id ul de la tastatura
+BEGIN
+    SELECT COUNT(*) INTO numar
+    FROM   employees_copy_bdm
+    WHERE  department_id = id_cautat;
+    CASE 
+        WHEN numar = 0 THEN DBMS_OUTPUT.PUT_LINE('Nu exista anagajati in departmentul ' || id_cautat);
+        WHEN numar = 1 THEN DBMS_OUTPUT.PUT_LINE('Exista 1 angajat in departamentul ' || id_cautat);
+        ELSE DBMS_OUTPUT.PUT_LINE('Exista ' || numar || ' angajati in departamentul '||  id_cautat);
+    END CASE;
+END;
+/
+
+select department_id, count(department_id)
+from employees
+group by department_id;
+
+
+------------------------------------------
+DECLARE 
+id_cautat employees.department_id%TYPE:= &idDepartment; 
+text VARCHAR(200);
+BEGIN
+    SELECT 
+    CASE COUNT(*)
+        WHEN 0 THEN  'Nu exista anagajati in departmentul ' || id_cautat
+        WHEN 1 THEN 'Exista 1 angajat in departamentul ' || id_cautat
+        ELSE 'Exista ' || Count(*) || ' angajati in departamentul '||  id_cautat
+    END "INFO Angajati"
+    INTO text
+    FROM   employees_copy_bdm
+    WHERE   department_id = id_cautat;
+END;
+/
+
+DECLARE
+numar Number(6);
+id_cautat employees.department_id%TYPE:= &idDepartment; -- preiau id ul de la tastatura
+BEGIN
+    SELECT COUNT(*) INTO numar
+    FROM   employees_copy_bdm
+    WHERE  department_id = id_cautat;
+    CASE 
+        WHEN numar = 0 THEN DBMS_OUTPUT.PUT_LINE('Nu exista anagajati in departmentul ' || numar);
+        WHEN numar = 1 THEN DBMS_OUTPUT.PUT_LINE('Exista 1 angajat in departamentul ' || id_cautat);
+        ELSE DBMS_OUTPUT.PUT_LINE('Exista ' || numar || ' angajati in departamentul '||  id_cautat);
+    END CASE;
+END;
+/
+
+
+select *
+from departments;
+
+--b
+DECLARE
+  angajati NUMBER(5);
+  id_cautat employees.department_id%TYPE:= &idDepartment; 
+  text VARCHAR(200);
+BEGIN
+  select CASE 
+  WHEN nr=0 THEN
+   'Nu exista anagajati in departmentul ' || id_cautat
+  WHEN nr=1 THEN
+  'Exista 1 angajat in departamentul ' || id_cautat
+  ElSE
+  'Exista ' || nr || ' angajati in departamentul '||  id_cautat
+  END "Numar Angajati"
+  INTO text
+  From(select count(department_id) nr 
+        from employees 
+        where department_id=id_cautat
+        group by  department_id) ;
+DBMS_OUTPUT.PUT_line(text);
+END;
+/
+
+
+
+--c
+DECLARE
+  angajati NUMBER(5);
+  id_cautat employees.department_id%TYPE:= &idDepartment; 
+BEGIN
+  select numar 
+  INTO angajati
+  From(select count(department_id) numar 
+        from employees 
+        where department_id=id_cautat
+        group by  department_id) ;
+CASE  angajati
+WHEN 0 THEN
+DBMS_OUTPUT.PUT_LINE('Nu exista anagajati in departmentul ' || id_cautat);
+WHEN 1 THEN
+DBMS_OUTPUT.PUT_LINE('Exista 1 angajat in departamentul ' || id_cautat);
+ELSE
+DBMS_OUTPUT.PUT_LINE('Exista ' || angajati || ' angajati in departamentul '||  id_cautat);
+END CASE;
+END;
+/
+
+
+

@@ -1,0 +1,140 @@
+
+select *
+from title;
+select *
+from member;
+select *
+from title_copy;
+select * 
+from rental;
+select * 
+from reservation;
+
+SET serveroutput ON;
+
+DESC member;
+
+
+--ex 3
+DECLARE 
+    numar_filme NUMBER(6);
+    nume_membru member.last_name%TYPE :='&nume';
+BEGIN
+    SELECT COUNT(distinct r.title_id) 
+    INTO numar_filme 
+    FROM rental r
+    JOIN member m on m.member_id = r.member_id
+    WHERE m.last_name = nume_membru;
+    EXCEPTION 
+        WHEN NO_DATA_FOUND THEN DBMS_OUTPUT.PUT_LINE('Nu am gasit niciun membru'); 
+        WHEN TOO_MANY_ROWS THEN DBMS_OUTPUT.PUT_LINE('Prea multi membrii');
+        
+    
+END;
+/
+
+
+-- ex4
+--cu if
+
+DECLARE 
+    numar_filme NUMBER(6);
+    nume_membru member.last_name%TYPE :='&nume';
+    numar_total NUMBER(6);
+BEGIN
+    SELECT COUNT(DISTINCT r.title_id)
+    INTO numar_filme 
+    FROM rental r
+    JOIN member m on m.member_id = r.member_id
+    WHERE UPPER(m.last_name) like UPPER(nume_membru);
+    
+    SELECT COUNT(title_id)
+    INTO numar_total
+    FROM title;
+   DBMS_OUTPUT.PUT_LINE('Membrul cu numele' ||' '|| UPPER(nume_membru) ||' '|| 'este in :');
+    IF numar_filme >= 0.75 * numar_total
+        THEN DBMS_OUTPUT.PUT_LINE('Catergoria 1');
+    ELSIF numar_filme BETWEEN 0.5 * numar_total AND 0.75 * numar_total
+        THEN DBMS_OUTPUT.PUT_LINE('Catergoria 2');
+    ELSIF numar_filme BETWEEN 0.25 * numar_total AND 0.5 * numar_total
+    THEN DBMS_OUTPUT.PUT_LINE('Catergoria 3');
+    ELSE DBMS_OUTPUT.PUT_LINE('Catergoria 4');
+    END IF;
+END;
+/
+
+-- cu case
+
+DECLARE 
+    numar_filme NUMBER(6);
+    nume_membru member.last_name%TYPE :='&nume';
+    numar_total NUMBER(6);
+BEGIN
+    SELECT COUNT(DISTINCT r.title_id)
+    INTO numar_filme 
+    FROM rental r
+    JOIN member m on m.member_id = r.member_id
+    WHERE UPPER(m.last_name) like UPPER(nume_membru);
+    
+    SELECT COUNT(title_id)
+    INTO numar_total
+    FROM title;
+   DBMS_OUTPUT.PUT_LINE('Membrul cu numele' ||' '|| UPPER(nume_membru) ||' '|| 'este in :');
+    CASE
+        WHEN numar_filme >= 0.75 * numar_total
+            THEN DBMS_OUTPUT.PUT_LINE('Catergoria 1');
+        WHEN numar_filme BETWEEN 0.5 * numar_total AND 0.75 * numar_total
+            THEN DBMS_OUTPUT.PUT_LINE('Catergoria 2');
+        WHEN numar_filme BETWEEN 0.25 * numar_total AND 0.5 * numar_total
+            THEN DBMS_OUTPUT.PUT_LINE('Catergoria 3');
+        ELSE DBMS_OUTPUT.PUT_LINE('Catergoria 4');
+    END CASE;
+END;
+/
+
+--ex5
+CREATE TABLE  member_bdm as SELECT * FROM member;
+DESC member;
+DESC member_bdm;
+ALTER TABLE member_bdm
+ADD CONSTRAINT PK_member_bdm PRIMARY KEY(member_id);
+
+select *
+from member_bdm;
+
+ALTER TABLE member_bdm
+ADD DISCOUNT NUMBER(6,2);
+
+DECLARE 
+    membru member_bdm.member_id%TYPE := &id;
+    numar_filme NUMBER(6);
+    numar_total NUMBER(6);
+BEGIN
+    SELECT COUNT(DISTINCT r.title_id)
+    INTO numar_filme 
+    FROM rental r
+    JOIN member_bdm m on m.member_id = r.member_id
+    WHERE m.member_id = membru;
+    
+    
+    SELECT COUNT(title_id)
+    INTO numar_total
+    FROM title;
+    
+    UPDATE member_bdm
+    SET discount = 
+        CASE
+            WHEN numar_filme >= 0.75 * numar_total
+                THEN 0.1
+            WHEN numar_filme BETWEEN 0.5 * numar_total AND 0.75 * numar_total
+                THEN 0.05
+            WHEN numar_filme BETWEEN 0.25 * numar_total AND 0.5 * numar_total
+                THEN 0.03
+            ELSE 0
+        END 
+    WHERE member_id = membru;
+
+    DBMS_OUTPUT.PUT_LINE('Actualizarea a fost facuta');
+    
+END;
+/
