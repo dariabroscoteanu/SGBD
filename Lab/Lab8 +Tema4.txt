@@ -1,0 +1,514 @@
+-- ex 1
+-- Pentru fiecare job (titlu – care va fi afi?at o singur? dat?) ob?ine?i lista angaja?ilor (nume ?i
+-- salariu) care lucreaz? în prezent pe jobul respectiv. Trata?i cazul în care nu exist? angaja?i care
+-- s? lucreze în prezent pe un anumit job. Rezolva?i problema folosind:
+
+-- a) cursoare clasice
+DECLARE 
+    CURSOR joburi IS SELECT job_id,job_title
+                    FROM jobs;
+    
+    CURSOR angajati (job_angajat jobs.job_id%TYPE) IS
+                SELECT e.last_name, e.first_name, e.salary
+                FROM employees e, jobs j
+                WHERE j.job_id = e.job_id AND j.job_id = job_angajat;
+                
+    jobid jobs.job_id%TYPE;            
+    jobtitle jobs.job_title%TYPE;
+    firstname employees.first_name%TYPE;
+    lastname employees.last_name%TYPE;
+    salary employees.salary%TYPE;
+    
+BEGIN
+    OPEN joburi;
+    LOOP
+        FETCH joburi INTO jobid, jobtitle;
+        EXIT WHEN joburi%NOTFOUND;
+        
+        DBMS_OUTPUT.PUT_LINE(jobtitle);
+        DBMS_OUTPUT.PUT_LINE('------------------------');
+        
+        OPEN angajati(jobid);
+        
+        LOOP
+             FETCH angajati INTO lastname, firstname, salary;
+             EXIT WHEN angajati%NOTFOUND;
+             DBMS_OUTPUT.PUT_LINE(lastname ||' '||firstname || ' -> ' || salary );
+        END LOOP;
+        
+        IF angajati%ROWCOUNT = 0
+            THEN DBMS_OUTPUT.PUT_LINE('Nu exista angajati!');
+        END IF;
+        
+        CLOSE angajati;
+        DBMS_OUTPUT.NEW_LINE;
+        
+    END LOOP;
+    CLOSE joburi;
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+    
+-- b) ciclu cursoare
+DECLARE 
+    CURSOR joburi IS SELECT job_id,job_title
+                    FROM jobs;
+    
+    CURSOR angajati (job_angajat jobs.job_id%TYPE) IS
+                SELECT e.last_name, e.first_name, e.salary
+                FROM employees e, jobs j
+                WHERE j.job_id = e.job_id AND j.job_id = job_angajat;
+                
+    jobid jobs.job_id%TYPE;            
+    jobtitle jobs.job_title%TYPE;
+    firstname employees.first_name%TYPE;
+    lastname employees.last_name%TYPE;
+    salary employees.salary%TYPE;
+    numar NUMBER(6);
+    
+BEGIN
+    FOR job IN joburi LOOP
+        
+        DBMS_OUTPUT.PUT_LINE(job.job_title);
+        DBMS_OUTPUT.PUT_LINE('------------------------');
+        
+        numar := 0;
+        FOR angajat IN angajati(job.job_id) LOOP
+             numar := numar + 1;
+             DBMS_OUTPUT.PUT_LINE(angajat.last_name ||' '||angajat.first_name || ' -> ' || angajat.salary );
+        END LOOP;
+        
+        IF numar = 0
+            THEN DBMS_OUTPUT.PUT_LINE('Nu exista angajati!');
+        END IF;
+
+        DBMS_OUTPUT.NEW_LINE;
+        
+    END LOOP;
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+   
+-- c) ciclu cursoare cu subcereri
+
+DECLARE 
+    jobid jobs.job_id%TYPE;            
+    jobtitle jobs.job_title%TYPE;
+    firstname employees.first_name%TYPE;
+    lastname employees.last_name%TYPE;
+    salary employees.salary%TYPE;
+    numar NUMBER(6);
+    
+BEGIN
+    FOR job IN (SELECT job_id, job_title FROM jobs) LOOP
+        
+        DBMS_OUTPUT.PUT_LINE(job.job_title);
+        DBMS_OUTPUT.PUT_LINE('------------------------');
+        
+        numar := 0;
+        FOR angajat IN (SELECT e.last_name, e.first_name, e.salary FROM employees e, jobs j WHERE j.job_id = e.job_id AND j.job_id = job.job_id) LOOP
+             numar := numar + 1;
+             DBMS_OUTPUT.PUT_LINE(angajat.last_name ||' '||angajat.first_name || ' -> ' || angajat.salary );
+        END LOOP;
+        
+        IF numar = 0
+            THEN DBMS_OUTPUT.PUT_LINE('Nu exista angajati!');
+        END IF;
+
+        DBMS_OUTPUT.NEW_LINE;
+        
+    END LOOP;
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+
+-- d) expresii cursor
+DECLARE 
+    CURSOR joburi IS SELECT jo.job_title, CURSOR(SELECT e.last_name || ' ' || e.first_name || ' -> ' || e.salary
+                                                FROM employees e, jobs j
+                                                WHERE j.job_id = e.job_id AND j.job_id = jo.job_id)
+                    FROM jobs jo;
+    
+     v_cursor SYS_REFCURSOR;
+                
+    jobid jobs.job_id%TYPE;            
+    jobtitle jobs.job_title%TYPE;
+    firstname employees.first_name%TYPE;
+    lastname employees.last_name%TYPE;
+    salary employees.salary%TYPE;
+    numar NUMBER(6);
+    
+     TYPE tab_nume IS TABLE OF VARCHAR(200) INDEX BY BINARY_INTEGER;
+     v_nume tab_nume;
+    
+BEGIN
+    OPEN joburi;
+    LOOP
+        FETCH joburi INTO jobtitle, v_cursor;
+        EXIT WHEN joburi%NOTFOUND;
+        DBMS_OUTPUT.PUT_LINE(jobtitle);
+        DBMS_OUTPUT.PUT_LINE('------------------------');
+        
+        
+        FETCH v_cursor BULK COLLECT INTO v_nume;
+        IF v_nume.COUNT = 0 THEN
+         DBMS_OUTPUT.PUT_LINE('Nu exista angajati!');
+         ELSE
+         FOR i IN v_nume.FIRST..v_nume.LAST LOOP
+         DBMS_OUTPUT.PUT_LINE(v_nume(i));
+         END LOOP;
+         END IF; 
+         DBMS_OUTPUT.NEW_LINE;
+
+        
+    END LOOP;
+    CLOSE joburi;
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+
+-- 2.
+
+DECLARE 
+    CURSOR joburi IS SELECT job_id,job_title
+                    FROM jobs;
+    
+    CURSOR angajati (job_angajat jobs.job_id%TYPE) IS
+                SELECT e.last_name, e.first_name, e.salary
+                FROM employees e, jobs j
+                WHERE j.job_id = e.job_id AND j.job_id = job_angajat;
+                
+    jobid jobs.job_id%TYPE;            
+    jobtitle jobs.job_title%TYPE;
+    firstname employees.first_name%TYPE;
+    lastname employees.last_name%TYPE;
+    salary employees.salary%TYPE;
+     nr_salariati NUMBER(5);
+    ct NUMBER(5);
+    salariu_total_job NUMBER(8,2);
+    medie_salariu NUMBER(8,2);
+    salariu_total NUMBER(10,2) := 0;
+    salariu_mediu NUMBER(10,2) := 0;
+    nr NUMBER(5) := 0;
+BEGIN
+    OPEN joburi;
+    LOOP
+        FETCH joburi INTO jobid, jobtitle;
+        EXIT WHEN joburi%NOTFOUND;
+        
+        DBMS_OUTPUT.PUT_LINE(jobtitle);
+        DBMS_OUTPUT.PUT_LINE('------------------------');
+        
+        OPEN angajati(jobid);
+        
+        SELECT count(*)
+        INTO nr_salariati
+        FROM employees e, jobs j
+        WHERE e.job_id = j.job_id and j.job_id = jobid;
+
+        IF nr_salariati = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('Nu lucreaza niciun angajat ca ' || jobtitle);
+        ELSIF nr_salariati = 1 THEN
+            DBMS_OUTPUT.PUT_LINE('Un singur  angajat lucreaza ca ' || jobtitle);
+        ELSE
+            DBMS_OUTPUT.PUT_LINE(nr_salariati || ' de angajati lucreaza ca ' || jobtitle);
+        END IF;
+
+        salariu_total_job := 0;
+        ct := 0;
+        LOOP
+             FETCH angajati INTO lastname, firstname, salary;
+             EXIT WHEN angajati%NOTFOUND;
+             ct := ct + 1;
+             salariu_total_job := salariu_total_job + salary;
+             DBMS_OUTPUT.PUT_LINE(lastname ||' '||firstname || ' -> ' || salary );
+        END LOOP;
+        
+        salariu_total := salariu_total + salariu_total_job;
+        nr := nr + ct;
+        IF ct = 0
+            THEN DBMS_OUTPUT.PUT_LINE('Nu exista angajati!');
+            ELSE 
+            medie_salariu := salariu_total_job / ct;
+            DBMS_OUTPUT.PUT_LINE('Salariul total per job: ' || salariu_total_job);
+            DBMS_OUTPUT.PUT_LINE('Salariul mediu per job: ' || medie_salariu);
+        END IF;
+        
+        CLOSE angajati;
+        DBMS_OUTPUT.NEW_LINE;
+    
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+    END LOOP;
+    CLOSE joburi;
+    salariu_mediu := salariu_total / nr;
+    DBMS_OUTPUT.PUT_LINE('Salariul total per job: ' || salariu_total);
+    DBMS_OUTPUT.PUT_LINE('Salariul mediu per job: ' || salariu_mediu);
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+
+-- 3.
+
+DECLARE 
+    CURSOR joburi IS SELECT job_id,job_title
+                    FROM jobs;
+    
+    CURSOR angajati (job_angajat jobs.job_id%TYPE) IS
+                SELECT e.last_name, e.first_name, e.salary, e.commission_pct
+                FROM employees e, jobs j
+                WHERE j.job_id = e.job_id AND j.job_id = job_angajat;
+                
+    jobid jobs.job_id%TYPE;            
+    jobtitle jobs.job_title%TYPE;
+    firstname employees.first_name%TYPE;
+    lastname employees.last_name%TYPE;
+    salary employees.salary%TYPE;
+     nr_salariati NUMBER(5);
+    ct NUMBER(5);
+    salariu_total_job NUMBER(8,2);
+    medie_salariu NUMBER(8,2);
+    salariu_total NUMBER(10,2) := 0;
+    salariu_mediu NUMBER(10,2) := 0;
+    nr NUMBER(5) := 0;
+    plata_salarii NUMBER(10,2) := 0;
+    calcul NUMBER(10,2) := 0;
+    comision employees.commission_pct%TYPE;
+    BEGIN
+    OPEN joburi;
+    
+    SELECT SUM(salary) + SUM(salary * commission_pct)
+    INTO plata_salarii
+    FROM employees;
+    
+    DBMS_OUTPUT.PUT_LINE('Suma totala alocata pentru plata salariilor: ' || ' ' || plata_salarii);
+    DBMS_OUTPUT.PUT_LINE('--------------------------------------------------------------------------');
+    
+    LOOP
+        FETCH joburi INTO jobid, jobtitle;
+        EXIT WHEN joburi%NOTFOUND;
+        
+        DBMS_OUTPUT.PUT_LINE(jobtitle);
+        DBMS_OUTPUT.PUT_LINE('------------------------');
+        
+        OPEN angajati(jobid);
+        
+        SELECT count(*)
+        INTO nr_salariati
+        FROM employees e, jobs j
+        WHERE e.job_id = j.job_id and j.job_id = jobid;
+        
+        IF nr_salariati = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('Nu lucreaza niciun angajat ca ' || jobtitle);
+        ELSIF nr_salariati = 1 THEN
+            DBMS_OUTPUT.PUT_LINE('Un singur  angajat lucreaza ca ' || jobtitle);
+        ELSE
+            DBMS_OUTPUT.PUT_LINE(nr_salariati || ' de angajati lucreaza ca ' || jobtitle);
+        END IF;
+
+        salariu_total_job := 0;
+        ct := 0;
+        LOOP
+             FETCH angajati INTO lastname, firstname, salary, comision;
+             EXIT WHEN angajati%NOTFOUND;
+             ct := ct + 1;
+             salariu_total_job := salariu_total_job + salary;
+             calcul := salary;
+             IF comision IS NOT NULL
+                THEN calcul := calcul + comision * salary;
+            END IF;
+            calcul := (calcul * 100) / plata_salarii;
+             DBMS_OUTPUT.PUT_LINE(lastname ||' '||firstname || ' -> ' || salary || ' -> ' || TO_CHAR(calcul, '0.00') || '%');
+        END LOOP;
+        
+        salariu_total := salariu_total + salariu_total_job;
+        nr := nr + ct;
+        IF ct = 0
+            THEN DBMS_OUTPUT.PUT_LINE('Nu exista angajati!');
+            ELSE 
+            medie_salariu := salariu_total_job / ct;
+            DBMS_OUTPUT.PUT_LINE('Salariul total per job: ' || salariu_total_job);
+            DBMS_OUTPUT.PUT_LINE('Salariul mediu per job: ' || medie_salariu);
+        END IF;
+        
+        CLOSE angajati;
+        DBMS_OUTPUT.NEW_LINE;
+    
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+    END LOOP;
+    CLOSE joburi;
+    salariu_mediu := salariu_total / nr;
+    DBMS_OUTPUT.PUT_LINE('Salariul total per job: ' || salariu_total);
+    DBMS_OUTPUT.PUT_LINE('Salariul mediu per job: ' || salariu_mediu);
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+
+-- 4.
+
+DECLARE 
+    CURSOR joburi IS SELECT job_id,job_title
+                    FROM jobs;
+    
+    CURSOR angajati (job_angajat jobs.job_id%TYPE) IS
+                SELECT e.last_name, e.first_name, e.salary
+                FROM employees e, jobs j
+                WHERE j.job_id = e.job_id AND j.job_id = job_angajat
+                ORDER BY e.salary desc;
+                
+    jobid jobs.job_id%TYPE;            
+    jobtitle jobs.job_title%TYPE;
+    firstname employees.first_name%TYPE;
+    lastname employees.last_name%TYPE;
+    salary employees.salary%TYPE;
+     nr_salariati NUMBER(5);
+    ct NUMBER(5);
+    salariu_total_job NUMBER(8,2);
+    medie_salariu NUMBER(8,2);
+    salariu_total NUMBER(10,2) := 0;
+    salariu_mediu NUMBER(10,2) := 0;
+    nr NUMBER(5) := 0;
+    plata_salarii NUMBER(10,2) := 0;
+    calcul NUMBER(10,2) := 0;
+    comision employees.commission_pct%TYPE;
+    BEGIN
+    OPEN joburi;
+    
+    
+    LOOP
+        FETCH joburi INTO jobid, jobtitle;
+        EXIT WHEN joburi%NOTFOUND;
+        
+        DBMS_OUTPUT.PUT_LINE(jobtitle);
+        DBMS_OUTPUT.PUT_LINE('------------------------');
+        
+        OPEN angajati(jobid);
+        
+        SELECT count(*)
+        INTO nr_salariati
+        FROM employees e, jobs j
+        WHERE e.job_id = j.job_id and j.job_id = jobid;
+        
+        IF nr_salariati = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('Nu lucreaza niciun angajat ca ' || jobtitle);
+        ELSIF nr_salariati = 1 THEN
+            DBMS_OUTPUT.PUT_LINE('Un singur  angajat lucreaza ca ' || jobtitle);
+        ELSE
+            DBMS_OUTPUT.PUT_LINE(nr_salariati || ' de angajati lucreaza ca ' || jobtitle);
+        END IF;
+
+        ct := 0;
+        LOOP
+             FETCH angajati INTO lastname, firstname, salary;
+             EXIT WHEN angajati%NOTFOUND OR angajati%ROWCOUNT > 5;
+             ct := ct + 1;
+             DBMS_OUTPUT.PUT_LINE(lastname ||' '||firstname || ' -> ' || salary );
+        END LOOP;
+
+        IF ct < 5
+            THEN DBMS_OUTPUT.PUT_LINE('Aici lucreaza mai putin de 5 angajati' );
+        END IF;
+        
+        CLOSE angajati;
+        DBMS_OUTPUT.NEW_LINE;
+    
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+    END LOOP;
+    CLOSE joburi;
+    
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
+
+
+-- 5. 
+
+DECLARE 
+    CURSOR joburi IS SELECT job_id,job_title
+                    FROM jobs;
+    
+    CURSOR angajati (job_angajat jobs.job_id%TYPE) IS
+                SELECT e.last_name, e.first_name, e.salary
+                FROM employees e, jobs j
+                WHERE j.job_id = e.job_id AND j.job_id = job_angajat
+                ORDER BY e.salary desc;
+                
+    jobid jobs.job_id%TYPE;            
+    jobtitle jobs.job_title%TYPE;
+    firstname employees.first_name%TYPE;
+    lastname employees.last_name%TYPE;
+    salary employees.salary%TYPE;
+     nr_salariati NUMBER(5);
+    ct NUMBER(5);
+    salariu_total_job NUMBER(8,2);
+    medie_salariu NUMBER(8,2);
+    salariu_total NUMBER(10,2) := 0;
+    salariu_mediu NUMBER(10,2) := 0;
+    nr NUMBER(5) := 0;
+    plata_salarii NUMBER(10,2) := 0;
+    calcul NUMBER(10,2) := 0;
+    comision employees.commission_pct%TYPE;
+    BEGIN
+    OPEN joburi;
+    
+    
+    
+    LOOP
+        FETCH joburi INTO jobid, jobtitle;
+        EXIT WHEN joburi%NOTFOUND;
+        
+        DBMS_OUTPUT.PUT_LINE(jobtitle);
+        DBMS_OUTPUT.PUT_LINE('------------------------');
+        
+        OPEN angajati(jobid);
+        
+        SELECT count(*)
+        INTO nr_salariati
+        FROM employees e, jobs j
+        WHERE e.job_id = j.job_id and j.job_id = jobid;
+        
+        IF nr_salariati = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('Nu lucreaza niciun angajat ca ' || jobtitle);
+        ELSIF nr_salariati = 1 THEN
+            DBMS_OUTPUT.PUT_LINE('Un singur  angajat lucreaza ca ' || jobtitle);
+        ELSE
+            DBMS_OUTPUT.PUT_LINE(nr_salariati || ' de angajati lucreaza ca ' || jobtitle);
+        END IF;
+        
+        calcul := 0;
+        ct := 0;
+        LOOP
+             FETCH angajati INTO lastname, firstname, salary;
+             EXIT WHEN angajati%NOTFOUND OR angajati%ROWCOUNT > 5;
+             IF calcul = 0 OR salary <> calcul 
+                THEN calcul := salary;
+                     ct := ct + 1;
+            END IF;
+             DBMS_OUTPUT.PUT_LINE(ct || '. ' || lastname ||' '||firstname || ' -> ' || salary );
+        END LOOP;
+
+        IF ct < 5
+            THEN DBMS_OUTPUT.PUT_LINE('Aici lucreaza mai putin de 5 angajati' );
+        END IF;
+        
+        CLOSE angajati;
+        DBMS_OUTPUT.NEW_LINE;
+    
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+    END LOOP;
+    CLOSE joburi;
+    
+    DBMS_OUTPUT.NEW_LINE;
+    DBMS_OUTPUT.NEW_LINE;
+END;
+/
