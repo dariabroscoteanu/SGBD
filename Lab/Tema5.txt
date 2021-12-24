@@ -1,0 +1,106 @@
+-- tema 5 lab
+-- pt fiecare cod al unui job
+-- afisati anagajatii care au salariul mai mare sau egal cu al 5 lea salariu distinct de la acel job
+
+CREATE OR REPLACE PACKAGE Tema5_daria AS
+    CURSOR joburi IS 
+        SELECT job_id
+        FROM jobs;                                       -- cursor
+    numar CONSTANT REAL := 5;                            -- constanta
+    exceptie1 EXCEPTION;                                 -- exceptie
+     
+    TYPE tip_tabel IS TABLE OF VARCHAR(200) INDEX BY PLS_INTEGER;               -- tip de date intern
+    FUNCTION salariu(cod employees.job_id%type) RETURN NUMBER;                  -- functie
+    PROCEDURE afisare (cod IN jobs.job_id%type, tabel OUT tip_tabel);           -- procedura
+    PROCEDURE afis;
+    
+END Tema5_daria;
+/
+CREATE OR REPLACE PACKAGE BODY Tema5_daria IS
+    
+    
+    FUNCTION salariu(cod employees.job_id%type) RETURN NUMBER -- functie care returneaza al x -lea cel mai mic salariu pentru un job sau 0 daca nu exista angajati la acel job
+    AS 
+        sal NUMBER;
+        nr NUMBER;
+    BEGIN
+        sal := 0;
+        SELECT MIN(salary) 
+        INTO sal
+        FROM employees
+        WHERE job_id = cod AND ROWNUM <= numar
+        ORDER BY salary desc;
+        nr := 0;
+        SELECT COUNT(*)
+        INTO nr
+        FROM employees
+        WHERE job_id = cod AND ROWNUM <= numar
+        ORDER BY salary desc;
+        IF nr = 0
+            THEN sal := 0;
+        END IF;
+        RETURN sal;
+    END salariu;
+    
+    PROCEDURE afisare (cod IN jobs.job_id%type, tabel OUT tip_tabel) IS -- procedura care returneaza prin intermediului paramaetrului
+    -- de output primii  x angajati cu salariul mai mare ca cel obtinut prin apelarea functiei
+        sal NUMBER;
+    BEGIN 
+        sal := salariu(cod);
+        SELECT last_name ||' '|| first_name ||' are salariul '|| salary
+        BULK COLLECT INTO tabel
+        FROM employees
+        WHERE salary >=sal  and cod = job_id and ROWNUM <= numar
+        ORDER by salary desc;
+    END afisare;
+
+    PROCEDURE afis IS
+        cod employees.job_id%type;
+        tabel tip_tabel;
+        nr NUMBER;
+    BEGIN
+    nr := 0;
+        for job in joburi LOOP
+            cod := job.job_id;
+            afisare(cod, tabel);
+            DBMS_OUTPUT.PUT_LINE('Pt jobul cu id-ul ' || cod);
+            IF tabel.count  = 0
+                THEN DBMS_OUTPUT.PUT_LINE('Putini angajati!');
+            ELSE 
+                nr := nr + tabel.count;
+                for elem in tabel.first..tabel.last loop
+                    DBMS_OUTPUT.PUT_LINE(tabel(elem));
+                END loop;
+            END IF;
+            DBMS_OUTPUT.PUT_LINE('');
+    END LOOP;
+    IF nr <= 250
+       THEN RAISE exceptie1; -- aici declansez eroarea mea  - cand am mai putin de 250 se angajati afisati
+    END IF;
+    EXCEPTION
+            WHEN exceptie1 
+                THEN DBMS_OUTPUT.PUT_LINE('Mai putini de 250 de angajati!');
+            WHEN OTHERS
+                THEN DBMS_OUTPUT.PUT_LINE('Alte exceptii');
+    END afis;
+    
+END Tema5_daria;
+/
+
+EXECUTE Tema5_daria.afis;
+DECLARE 
+    cod jobs.job_id%type;
+    nr employees.salary%type;
+BEGIN
+    nr := Tema5_daria.salariu('Ananas');
+    DBMS_OUTPUT.PUT_LINE('Salariu minim: ' || nr);
+END;
+/
+DECLARE 
+    cod jobs.job_id%type;
+    nr employees.salary%type;
+BEGIN
+    nr := Tema5_daria.salariu('IT_PROG');
+    DBMS_OUTPUT.PUT_LINE('Salariu minim: ' || nr);
+END;
+/

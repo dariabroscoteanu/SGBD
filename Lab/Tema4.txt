@@ -1,0 +1,264 @@
+-- pentru o facultate al carei nume este dat, pentru fiecare amfiteatru, afisati studentii ai caror grupe desfasoara ore in amfiteatrul curent sau afisati 'nu exista'
+-- daca pentru grupa x nu exista studenti care se aiba ore in amfiteatrul y
+
+
+CREATE OR REPLACE PROCEDURE Ex6 (denumirefac FACULTATE.denumire%TYPE)
+AS 
+    TYPE tabl_idx IS TABLE OF sala%rowtype INDEX BY PLS_INTEGER;
+    amfiteatre tabl_idx;
+    
+    TYPE tip_lista_nested IS TABLE OF grupa%rowtype;
+    grupe tip_lista_nested := tip_lista_nested();
+    
+    TYPE tabl_index IS TABLE OF VARCHAR(200) INDEX BY PLS_INTEGER;
+    v_nume tabl_index;
+
+    numar NUMBER(6);
+BEGIN
+    SELECT *
+    BULK COLLECT INTO amfiteatre
+    FROM sala;
+    
+    SELECT COUNT(*)
+    INTO numar
+    FROM grupa g, sectie sect, serie ser, facultate f
+    WHERE g.cod_serie = ser.cod_serie and ser.cod_sectie = sect.cod_sectie and sect.cod_facultate = f.cod_facultate
+    AND UPPER(f.denumire) LIKE  UPPER(denumirefac) AND ROWNUM <= 1000;
+    
+    grupe.extend(numar + 1);
+    
+     SELECT g.cod_grupa, g.denumire, g.cod_serie
+     BULK COLLECT INTO grupe
+    FROM grupa g, sectie sect, serie ser, facultate f
+    WHERE g.cod_serie = ser.cod_serie and ser.cod_sectie = sect.cod_sectie and sect.cod_facultate = f.cod_facultate
+    AND UPPER(f.denumire) LIKE  UPPER('Facultatea de Matematica%');
+    
+    FOR i IN amfiteatre.first..amfiteatre.last LOOP
+        DBMS_OUTPUT.PUT_LINE('Amfiteatrul ' || amfiteatre(i).denumire);
+        DBMS_OUTPUT.PUT_LINE('----------------------------------------------------');
+        
+        FOR j IN grupe.first..grupe.last LOOP
+            DBMS_OUTPUT.PUT_LINE('Grupa ' || grupe(j).denumire);
+            DBMS_OUTPUT.PUT_LINE('---------------------');
+            SELECT s.nume || ' ' || s.prenume
+            BULK COLLECT INTO v_nume
+            FROM student s, orar o, inscriere ins
+            WHERE s.cod_student = ins.cod_student and ins.cod_grupa = grupe(j).cod_grupa and o.cod_grupa = grupe(j).cod_grupa and amfiteatre(i).cod_sala = o.cod_sala;
+            IF v_nume.count > 0 THEN
+            numar := 0;
+                FOR k in v_nume.first..v_nume.last LOOP
+                    numar := numar + 1;
+                    DBMS_OUTPUT.PUT_LINE(numar || '. ' || v_nume(k));
+                END LOOP;
+            END IF;
+            IF v_nume.count = 0 
+                THEN DBMS_OUTPUT.PUT_LINE('Nu exista');
+                END IF;
+            DBMS_OUTPUT.NEW_LINE;
+            DBMS_OUTPUT.NEW_LINE;
+        END LOOP;
+    END LOOP;
+    
+    
+END;
+/
+
+BEGIN
+    Ex6('Facultatea de Matematica si Informatica');
+END;
+/
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- pentru examenele care au ca forma 'Examen Scris'
+-- afisati studentii care le-au promovat cu nota mai mare de 7
+
+CREATE OR REPLACE PROCEDURE Ex7 (tip_examen examen.forma%TYPE, nota_examen promoveaza.nota%TYPE)
+AS 
+   CURSOR cursuri (cod curs.cod_curs%TYPE) IS
+                SELECT denumire
+                FROM curs
+                WHERE cod_curs = cod;
+    
+    CURSOR examene (tip_examen examen.forma%TYPE) IS
+                SELECT cod_examen, cod_curs
+                FROM examen
+                WHERE UPPER(forma) LIKE UPPER(tip_examen);
+                
+    CURSOR studenti (cod examen.cod_examen%TYPE ) IS
+                SELECT s.nume || ' ' || s.prenume || ' a obtinut nota ' || p.nota as result
+                FROM promoveaza p, student s
+                WHERE p.cod_student = s.cod_student AND p.cod_examen = cod AND p.nota >= nota_examen;
+        
+    den curs.denumire%TYPE;
+    cod curs.cod_curs%TYPE;
+BEGIN
+    
+    FOR examen in examene(tip_examen) LOOP
+        OPEN cursuri(examen.cod_curs);
+            FETCH cursuri INTO den;
+            DBMS_OUTPUT.PUT_LINE('Cursul ' || den);
+            DBMS_OUTPUT.PUT_LINE('------------------------');
+        CLOSE cursuri;
+        
+        FOR student IN studenti(examen.cod_examen) LOOP
+            DBMS_OUTPUT.PUT_LINE(student.result);
+        END LOOP;
+        
+        DBMS_OUTPUT.NEW_LINE;
+        DBMS_OUTPUT.NEW_LINE;
+    END LOOP;
+    
+    
+END;
+/
+
+BEGIN
+    Ex7('Examen Scris', 7);
+END;
+/
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- pentru un prenume al unui profesor dat, determinati numarul de facultati la care acesta este angajat 
+-- daca prenumele lui apare de cel putin doua ori, selectand doar facultatile care cifra 1 in codul postal
+
+CREATE OR REPLACE FUNCTION Ex8(cod profesor.cod_profesor%TYPE) RETURN NUMBER 
+IS 
+    nr_facultati NUMBER;
+    TYPE tip_tabel IS TABLE OF contract%rowtype INDEX BY PLS_INTEGER;
+    tabel tip_tabel;
+    pren profesor.prenume%type;
+    --exceptii
+    NEGATIVE_NUMBER EXCEPTION;
+    NO_DATA_FOUND1 EXCEPTION;
+    NO_DATA_FOUND2 EXCEPTION;
+
+BEGIN 
+    IF cod < 0 THEN -- codul profesorului nu e valid
+        RAISE NEGATIVE_NUMBER;
+    END IF;
+    
+    SELECT *
+    BULK COLLECT INTO tabel
+    FROM contract
+    WHERE cod_profesor = cod;
+    
+    IF SQL%NOTFOUND THEN
+        RAISE NO_DATA_FOUND1;
+    END IF;
+    
+    SELECT prenume
+    INTO pren
+    FROM profesor 
+    WHERE cod_profesor = cod;
+    
+    SELECT COUNT(f.cod_facultate)
+    INTO nr_facultati
+    FROM facultate f 
+    JOIN contract c ON (c.cod_facultate = f.cod_facultate)
+    WHERE c.cod_profesor = cod
+    AND (SELECT COUNT(prenume)FROM profesor WHERE UPPER(prenume) LIKE UPPER(pren) ) >= 2
+    AND cod_postal LIKE '%1%';
+    
+    IF nr_facultati = 0  THEN
+        RAISE No_DATA_FOUND2;
+    ELSE RETURN nr_facultati;
+    END IF;
+    
+    EXCEPTION
+        WHEN NEGATIVE_NUMBER THEN
+            DBMS_OUTPUT.PUT_LINE('Codul profesorului nu poate sa fie negativ!');
+            RETURN -1;
+        WHEN NO_DATA_FOUND1 THEN
+            DBMS_OUTPUT.PUT_LINE('Nu exista profesorul cu codul ' || cod || ' in tabela contract!');
+            RETURN -1;
+        WHEN NO_DATA_FOUND2 THEN
+            DBMS_OUTPUT.PUT_LINE('Nu exista facultati care sa indeplineasca acele conditii!');
+            RETURN -1;
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Codul de eroare: '  || SQLCODE);
+            DBMS_OUTPUT.PUT_LINE('Mesajul erorii: ' || SQLERRM); 
+            RETURN -1;
+END;
+/
+
+DECLARE 
+    numar NUMBER;
+    cod profesor.cod_profesor%type := &cod;
+BEGIN
+    numar := Ex8(cod);
+    DBMS_OUTPUT.PUT_LINE(numar);
+    IF numar > -1 THEN
+        DBMS_OUTPUT.PUT_LINE('Rezultatul pentru profesorul cu codul ' || cod ||' este: ' || numar );
+    END IF;
+END;
+/
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- pentru un student al carui nume este dat, afisez cursurile la care e inscris, luandu le in calcul doar pe cele desfasurate in amfiteatre
+-- cu litera i in denumire
+-- mai fac o inserare in tabela student pentru a exemplifica eroarea de too many rows
+CREATE OR REPLACE PROCEDURE Ex9(nume_student student.nume%type)
+AS 
+    TYPE tabel_index IS TABLE OF curs.denumire%type INDEX BY PLS_INTEGER;
+    den_curs tabel_index;
+    TYPE tabel_index_studenti IS TABLE OF student%rowtype INDEX BY PLS_INTEGER;
+    studenti tabel_index_studenti;
+    
+    NO_DATA_FOUND1 EXCEPTION;
+    NO_DATA_FOUND2 EXCEPTION;
+    TOO_MANY_ROWS1 EXCEPTION;
+    
+BEGIN
+    SELECT *
+    BULK COLLECT INTO studenti
+    FROM student
+    WHERE UPPER(nume) = UPPER(nume_student);
+    IF SQL%NOTFOUND THEN
+        RAISE NO_DATA_FOUND1;
+    END IF;
+    
+    IF studenti.count >= 2 THEN
+        RAISE TOO_MANY_ROWS1;
+    END IF;
+    
+    SELECT c.denumire
+    BULK COLLECT INTO den_curs
+    FROM curs c JOIN orar o ON (o.cod_curs = c.cod_curs)
+    JOIN sala s ON (o.cod_sala = s.cod_sala)
+    JOIN grupa g on (o.cod_grupa = g.cod_grupa)
+    JOIN inscriere i ON (i.cod_grupa = g.cod_grupa)
+    JOIN student stud ON (stud.cod_student = i.cod_student)
+    WHERE UPPER(stud.nume) = UPPER(nume_student)
+    AND s.denumire LIKE '%i%';
+    
+    IF den_curs.count = 0 THEN
+        RAISE NO_DATA_FOUND2;
+    END IF;
+
+    DBMS_OUTPUT.PUT_LINE('Cursurile la care participa studentul cu numele ' || nume_student);
+    FOR i IN den_curs.FIRST..den_curs.LAST LOOP
+        DBMS_OUTPUT.PUT_LINE(den_curs(i));
+    END LOOP;
+    
+    EXCEPTION
+        WHEN NO_DATA_FOUND1 THEN
+            DBMS_OUTPUT.PUT_LINE('Nu exista studenti care sa aiba acest nume de familie!');
+        WHEN NO_DATA_FOUND2 THEN
+            DBMS_OUTPUT.PUT_LINE('Nu exista cursuri care sa indeplineasca acele conditii!');
+        WHEN TOO_MANY_ROWS1 THEN
+            DBMS_OUTPUT.PUT_LINE('Exista mai mult de un student cu acel nume!');
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Codul de eroare: '  || SQLCODE);
+            DBMS_OUTPUT.PUT_LINE('Mesajul erorii: ' || SQLERRM); 
+END;
+/
+DECLARE
+    nume student.nume%type := '&nume';
+BEGIN
+    Ex9(nume);
+END;
+/
